@@ -1,0 +1,13 @@
+<classpath>
+  <classpathentry path="src/main/java" excluding="**/.svn/|**/CVS/" kind="src"/>
+  <classpathentry path="src/test/java" excluding="**/.svn/|**/CVS/" kind="src" output="target/test/classes"/>
+  <classpathentry path="org.eclipse.jdt.launching.JRE_CONTAINER" kind="con"/>
+  <classpathentry path="target/classes" kind="output"/>
+  <classpathentry path="M2_REPO/com/google/guava/guava/16.0.1/guava-16.0.1.jar" sourcepath="M2_REPO/com/google/guava/guava/16.0.1/guava-16.0.1-sources.jar" kind="var" javadocpath="M2_REPO/com/google/guava/guava/16.0.1/guava-16.0.1-javadoc.jar"/>
+  <classpathentry path="M2_REPO/log4j/log4j/1.2.16/log4j-1.2.16.jar" sourcepath="M2_REPO/log4j/log4j/1.2.16/log4j-1.2.16-sources.jar" kind="var" javadocpath="M2_REPO/log4j/log4j/1.2.16/log4j-1.2.16-javadoc.jar"/>
+  <classpathentry path="M2_REPO/junit/junit/4.8.2/junit-4.8.2.jar" sourcepath="M2_REPO/junit/junit/4.8.2/junit-4.8.2-sources.jar" kind="var" javadocpath="M2_REPO/junit/junit/4.8.2/junit-4.8.2-javadoc.jar"/>
+  <classpathentry path="M2_REPO/org/jmock/jmock/2.5.1/jmock-2.5.1.jar" sourcepath="M2_REPO/org/jmock/jmock/2.5.1/jmock-2.5.1-sources.jar" kind="var" javadocpath="M2_REPO/org/jmock/jmock/2.5.1/jmock-2.5.1-javadoc.jar"/>
+  <classpathentry path="M2_REPO/org/jmock/jmock-junit4/2.5.1/jmock-junit4-2.5.1.jar" sourcepath="M2_REPO/org/jmock/jmock-junit4/2.5.1/jmock-junit4-2.5.1-sources.jar" kind="var" javadocpath="M2_REPO/org/jmock/jmock-junit4/2.5.1/jmock-junit4-2.5.1-javadoc.jar"/>
+  <classpathentry path="M2_REPO/org/hamcrest/hamcrest-core/1.1/hamcrest-core-1.1.jar" sourcepath="M2_REPO/org/hamcrest/hamcrest-core/1.1/hamcrest-core-1.1-sources.jar" kind="var" javadocpath="M2_REPO/org/hamcrest/hamcrest-core/1.1/hamcrest-core-1.1-javadoc.jar"/>
+  <classpathentry path="M2_REPO/org/hamcrest/hamcrest-library/1.1/hamcrest-library-1.1.jar" sourcepath="M2_REPO/org/hamcrest/hamcrest-library/1.1/hamcrest-library-1.1-sources.jar" kind="var" javadocpath="M2_REPO/org/hamcrest/hamcrest-library/1.1/hamcrest-library-1.1-javadoc.jar"/>
+</classpath>

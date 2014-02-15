@@ -1,0 +1,28 @@
+{
+    'configuration': {
+        'appenders': {
+            'Console': {
+                'name': 'STDOUT',
+                'PatternLayout': {
+                    'pattern': '%m%n'
+                }
+            }
+        },
+        'loggers': {
+            'logger': {
+                'name': 'EventLogger',
+                'level': 'info',
+                'additivity': 'false',
+                'appender-ref': {
+                    'ref': 'Routing'
+                }
+            },
+            'root': {
+                'level': 'debug',
+                'appender-ref': {
+                    'ref': 'STDOUT'
+                }
+            }
+        }
+    }
+}
