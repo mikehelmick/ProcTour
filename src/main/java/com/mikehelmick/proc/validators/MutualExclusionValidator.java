@@ -85,7 +85,13 @@ public class MutualExclusionValidator extends Validator {
           counts.put(acquire.getPid(), counts.get(acquire.getPid()) + 1);
         }
       }
-      
+      // Check the counts.
+      for (Map.Entry<Long, Integer> count : counts.entrySet()) {
+        if (count.getValue() != acquiresPerProcess) {
+          errors.append("Process id: " + count.getKey() + " acquired resource #" + resource + " : "
+              + count.getValue() + " times, but expected " + acquiresPerProcess + "\n");
+        }
+      }
     }
     
     final String errorStr = errors.toString();

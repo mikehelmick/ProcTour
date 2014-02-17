@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.mikehelmick.proc.Clock;
@@ -19,6 +20,13 @@ public abstract class Validator {
   
   public static void start(long numProcs) {
     numProcesses = numProcs;
+  }
+  
+  @VisibleForTesting
+  static void reset() {
+    numProcesses = 0;
+    consensusDeclarations.clear();
+    resourceEvents.clear();
   }
   
   protected Map<String, ConsensusDeclaration> getConsensusDeclarations() {

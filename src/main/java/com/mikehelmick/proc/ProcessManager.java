@@ -17,7 +17,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
-import com.google.common.util.concurrent.MoreExecutors;
+import com.mikehelmick.proc.validators.InvalidSimulationOutputException;
+import com.mikehelmick.proc.validators.Validator;
 
 public final class ProcessManager {
   private static Logger logger = Logger.getLogger(ProcessManager.class);
@@ -46,6 +47,12 @@ public final class ProcessManager {
   private ScheduledExecutorService executor;
   private HeartBeat heartBeat;
   private MessageRouter messageRouter;
+  
+  // Consensus declarations
+  private Map<String, ConsensusDeclaration> consensusDeclarations = Maps.newConcurrentMap();
+  
+  // Validators that are listening
+  private List<Validator> validators = Collections.synchronizedList(Lists.<Validator>newLinkedList());
 
   private ProcessManager() {
     // Nothing left to do.
@@ -177,6 +184,10 @@ public final class ProcessManager {
       }
     }
   }
+
+  public void addValidator(Validator validator) {
+    validators.add(validator);
+  }
   
   public int getSharedResouceCount() {
     return resources.size();
@@ -268,30 +279,17 @@ public final class ProcessManager {
     logger.info("All tasks terminated.");
     logger.info("Heartbeat periods: " + heartBeat.getHeartbeats());
     logger.info("Messages delivered: " + messageRouter.getMessages());
-  }
- 
-  /*
-  Message receive(Long pid) throws InvalidProcessId {
-    final Queue<Message> mailbox = mailboxes.get(pid);
-    if (mailbox == null) {
-      throw new InvalidProcessId(pid + " is in invalid process id.");
+    
+    logger.info("Running validators: " + validators.size());
+    for (Validator validator : validators) {
+      logger.info(" Checking validator: " + validator.getClass().getCanonicalName());
+      try {
+        validator.validate();
+      } catch (InvalidSimulationOutputException e) {
+        logger.fatal("Validation test failed", e);
+      }
     }
-    return mailbox.poll();
   }
-
-  Message receiveBlocking(Long pid) throws InvalidProcessId {
-    final LinkedBlockingQueue<Message> mailbox = mailboxes.get(pid);
-    if (mailbox == null) {
-      throw new InvalidProcessId(pid + " is in invalid process id.");
-    }
-    try {
-      return mailbox.poll(1, TimeUnit.MINUTES);
-    } catch (InterruptedException iex) {
-      Thread.interrupted();
-    }
-    return null;
-  }
-  */
 
   void send(Message.MessageBuilder builder, Process proc) {
     builder.setSender(proc.getProcessId());
@@ -323,6 +321,7 @@ public final class ProcessManager {
     if (resources.get(resource) == null) {
        logger.info("Successful resource declaration for resource " + resource + " by pid: " + proc.getProcessId());
        resources.put(resource, proc);
+       Validator.resourceDeclaration(resource, proc.getProcessId(), time);
     } else {
       final String error = "Invalid resource declaration: " + resource + " is currently owned by "
           + resources.get(resource) + " and cannot be claimed by " + proc.getProcessId();
@@ -349,11 +348,19 @@ public final class ProcessManager {
     } else {
       logger.info("Resource release of " + resource + " was successful");
       resources.remove(resources);
+      Validator.resourceReleased(resource, proc.getProcessId(), time);
     }
   }
   
   public synchronized void declareConcensus(Clock time, String data, Process proc) {
-    // TODO(mikehelmick@) implement
+    ConsensusDeclaration cd;
+    if (!consensusDeclarations.containsKey(data)) {
+      cd = new ConsensusDeclaration(data, this.maxPid);
+      consensusDeclarations.put(data, cd);
+    } else {
+      cd = consensusDeclarations.get(data);
+    }
+    Validator.concensusDeclaration(cd);
   }
 
   public synchronized Long register(Process proc) {
