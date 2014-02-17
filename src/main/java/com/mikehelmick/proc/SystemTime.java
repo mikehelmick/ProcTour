@@ -9,7 +9,7 @@ public class SystemTime {
 
   private static AtomicLong lastTime = new AtomicLong(0);
   
-  static long getTime() {
+  public static long getTime() {
     long expected = lastTime.get();
     long curTime = System.currentTimeMillis();
     if (expected >= curTime) {

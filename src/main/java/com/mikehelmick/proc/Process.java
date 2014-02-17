@@ -39,12 +39,12 @@ public abstract class Process {
 	  ProcessManager.getInstance().sendOne(builder, receiver, this);
 	}
 
-	final void declareResourceOwnership(int resourceNum) {
-	  ProcessManager.getInstance().declareOwnership(resourceNum, this);
+	final void declareResourceOwnership(Clock time, int resourceNum) {
+	  ProcessManager.getInstance().declareOwnership(time, resourceNum, this);
 	}
 	
-	final void releaseResourceOwnership(int resourceNum) {
-	  ProcessManager.getInstance().releaseOwnership(resourceNum, this);
+	final void releaseResourceOwnership(Clock time, int resourceNum) {
+	  ProcessManager.getInstance().releaseOwnership(time, resourceNum, this);
 	}
 	
 	final void declareConcensus(Clock time, String data) {

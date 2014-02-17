@@ -36,7 +36,7 @@ public final class ProcessManager {
   private Map<Long, Process> procMap = Maps.newConcurrentMap();
   private Map<Long, LinkedBlockingQueue<Message>> mailboxes = Maps.newConcurrentMap();
   private Map<Integer, Process> resources = Maps.newConcurrentMap();
-  private long nextPid = 1;
+  private long maxPid = 0;
   private State state = State.STARTUP;
   private Integer resourceCount = 1;
   
@@ -219,13 +219,13 @@ public final class ProcessManager {
     logger.info("Creating thread pool");
     executor = Executors.newScheduledThreadPool(THREADS);
     // Create the heartbeat, this will get things started. Hopefully.
-    heartBeat = new HeartBeat(nextPid - 1);
+    heartBeat = new HeartBeat(maxPid);
     heartbeatHandle = executor.scheduleWithFixedDelay(
         heartBeat, 1, 5, TimeUnit.SECONDS);
     logger.info("Thread pool initialized, simulator running");
     
     logger.info("Message router starting up.");
-    messageRouter = new MessageRouter(nextPid - 1);
+    messageRouter = new MessageRouter(maxPid);
     Thread mrThread = new Thread(messageRouter);
     mrThread.start();
     logger.info("Message router is running.");
@@ -295,7 +295,7 @@ public final class ProcessManager {
 
   void send(Message.MessageBuilder builder, Process proc) {
     builder.setSender(proc.getProcessId());
-    for (long pid = 1; pid < nextPid; pid++) {
+    for (long pid = 1; pid <= maxPid; pid++) {
       if (pid == proc.getProcessId()) {
         // don't send to self
         continue;
@@ -314,7 +314,7 @@ public final class ProcessManager {
     executionQueue.add(receiver);
   }
   
-  public synchronized void declareOwnership(Integer resource, Process proc) {
+  public synchronized void declareOwnership(Clock time, Integer resource, Process proc) {
     if (resource < 0 || resource > resourceCount) {
       throw new IllegalArgumentException("Invalid resource, " + resource + ", must be >= 1 and <= " + resourceCount);
     }
@@ -331,7 +331,7 @@ public final class ProcessManager {
     }
   }
   
-  public synchronized void releaseOwnership(int resource, Process proc) {
+  public synchronized void releaseOwnership(Clock time, int resource, Process proc) {
     if (resource < 0 || resource > resourceCount) {
       throw new IllegalArgumentException("Invalid resource, " + resource + ", must be >= 1 and <= " + resourceCount);
     }
@@ -361,7 +361,7 @@ public final class ProcessManager {
       throw new IllegalStateException("Impossible to regsiter process, no longer in startup state.");
     }
     
-    final long procId = nextPid++;
+    final long procId = ++maxPid;
     logger.info("New process registered, pid: " + procId);
     procMap.put(procId, proc);
     // Create a mailbox for this process
