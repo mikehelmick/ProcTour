@@ -34,9 +34,9 @@ public final class ProcessManager {
 
   private static ProcessManager INSTANCE = new ProcessManager();
 
-  private Map<Long, Process> procMap = Maps.newConcurrentMap();
+  private Map<Long, Proc> procMap = Maps.newConcurrentMap();
   private Map<Long, Map<Long, LinkedBlockingQueue<Envelope>>> mailboxes = Maps.newConcurrentMap();
-  private Map<Integer, Process> resources = Maps.newConcurrentMap();
+  private Map<Integer, Proc> resources = Maps.newConcurrentMap();
   private long maxPid = 0;
   private State state = State.STARTUP;
   private Integer resourceCount = 1;
@@ -96,12 +96,17 @@ public final class ProcessManager {
       hbLogger.info("Sending heartbeats");
       Collections.shuffle(procIds);
       for (Long pid : procIds) {
-        final Process process = procMap.get(pid);
+        final Proc process = procMap.get(pid);
         executor.submit(
             new Runnable() {
               @Override
               public void run() {
-                process.tick();
+                try {
+                  process.tick();
+                } catch (Exception ex) {
+                  logger.fatal("receiveMessage caused an exception", ex);
+                  System.exit(1);
+                }
               }                  
             });
       }
@@ -145,7 +150,7 @@ public final class ProcessManager {
             mrLogger.info("No messages to route.");
             continue;
           }
-          final Process process = procMap.get(pid);
+          final Proc process = procMap.get(pid);
           
           // See if there is a message for this process
           Map<Long, LinkedBlockingQueue<Envelope>> myMailboxes = mailboxes.get(pid);
@@ -185,8 +190,13 @@ public final class ProcessManager {
                   new Runnable() {
                     @Override
                     public void run() {
-                      mrLogger.debug("delivering message pid: " + pid + " message: " + message);
-                      process.receiveMessage(message);
+                      try {
+                        mrLogger.debug("delivering message pid: " + pid + " message: " + message);
+                        process.receiveMessage(message);
+                      } catch (Exception ex) {
+                        logger.fatal("receiveMessage caused an exception", ex);
+                        System.exit(1);
+                      }
                     }
                   },
                   delay, TimeUnit.MILLISECONDS);
@@ -205,6 +215,10 @@ public final class ProcessManager {
     validators.add(validator);
   }
   
+  public long getProcessCount() {
+    return maxPid;
+  }
+
   public int getSharedResouceCount() {
     return resources.size();
   }
@@ -298,16 +312,17 @@ public final class ProcessManager {
     
     logger.info("Running validators: " + validators.size());
     for (Validator validator : validators) {
-      logger.info(" Checking validator: " + validator.getClass().getCanonicalName());
+      logger.info("Checking validator: " + validator.getClass().getCanonicalName());
       try {
         validator.validate();
+        logger.info("successful validation: " + validator.getClass().getCanonicalName());
       } catch (InvalidSimulationOutputException e) {
         logger.fatal("Validation test failed", e);
       }
     }
   }
 
-  void send(Message.MessageBuilder builder, Process proc) {
+  void send(Message.MessageBuilder builder, Proc proc) {
     builder.setSender(proc.getProcessId());
     for (long pid = 1; pid <= maxPid; pid++) {
       if (pid == proc.getProcessId()) {
@@ -327,7 +342,7 @@ public final class ProcessManager {
     }
   }
   
-  void sendOne(Message.MessageBuilder builder, Long receiver, Process proc) {
+  void sendOne(Message.MessageBuilder builder, Long receiver, Proc proc) {
     if (receiver.equals(proc.getProcessId())) {
       throw new IllegalArgumentException("Cannot send a message to yourself.");
     }
@@ -344,7 +359,7 @@ public final class ProcessManager {
     executionQueue.add(receiver);
   }
   
-  public synchronized void declareOwnership(Clock time, Integer resource, Process proc) {
+  public synchronized void declareOwnership(Clock time, Integer resource, Proc proc) {
     if (resource < 0 || resource > resourceCount) {
       throw new IllegalArgumentException("Invalid resource, " + resource + ", must be >= 1 and <= " + resourceCount);
     }
@@ -362,7 +377,7 @@ public final class ProcessManager {
     }
   }
   
-  public synchronized void releaseOwnership(Clock time, int resource, Process proc) {
+  public synchronized void releaseOwnership(Clock time, int resource, Proc proc) {
     if (resource < 0 || resource > resourceCount) {
       throw new IllegalArgumentException("Invalid resource, " + resource + ", must be >= 1 and <= " + resourceCount);
     }
@@ -379,12 +394,12 @@ public final class ProcessManager {
       throw new IllegalStateException(error);
     } else {
       logger.info("Resource release of " + resource + " was successful");
-      resources.remove(resources);
+      resources.remove(resource);
       Validator.resourceReleased(resource, proc.getProcessId(), time);
     }
   }
   
-  public synchronized void declareConcensus(Clock time, String data, Process proc) {
+  public synchronized void declareConsensus(Clock time, String data, Proc proc) {
     ConsensusDeclaration cd;
     if (!consensusDeclarations.containsKey(data)) {
       cd = new ConsensusDeclaration(data, this.maxPid);
@@ -395,7 +410,7 @@ public final class ProcessManager {
     Validator.concensusDeclaration(cd);
   }
 
-  public synchronized Long register(Process proc) {
+  public synchronized Long register(Proc proc) {
     if (!state.equals(State.STARTUP)) {
       throw new IllegalStateException("Impossible to regsiter process, no longer in startup state.");
     }

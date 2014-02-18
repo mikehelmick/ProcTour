@@ -4,6 +4,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Represents a monotonically increasing clock based on the system time.
+ * Framework internal, but you may use it if you like. 
+ * </p>
+ * Very frequent accesses to this will advance the clock rapidly.
  */
 public class SystemTime {
 

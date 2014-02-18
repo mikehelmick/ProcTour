@@ -4,6 +4,9 @@ import java.util.Map;
 
 import com.google.common.collect.Maps;
 
+/**
+ * Represents a consensus declaration made by the processes.
+ */
 public final class ConsensusDeclaration {
 
   private final String data;

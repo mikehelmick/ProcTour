@@ -45,7 +45,7 @@ public class ProcessManagerTest {
     ProcessManager.reset();
   }
 
-  private static class Heartbeat extends Process {
+  private static class Heartbeat extends Proc {
     final CountDownLatch latch;
 
     Heartbeat(CountDownLatch latch) {
@@ -79,7 +79,7 @@ public class ProcessManagerTest {
     ProcessManager.reset();
   }
 
-  private static class PingPong extends Process {
+  private static class PingPong extends Proc {
     
     private final long totalProcs;
 

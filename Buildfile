@@ -12,4 +12,6 @@ define 'proctour' do
    
   compile.with 'com.google.guava:guava:jar:16.0.1', 'log4j:log4j:jar:1.2.16'
   package :jar
+  
+  run.using :main => "com.mikehelmick.proc.example.Example"
 end

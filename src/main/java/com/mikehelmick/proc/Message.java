@@ -3,7 +3,13 @@ package com.mikehelmick.proc;
 import java.io.Serializable;
 
 /**
- * Message that is sent 
+ * Message that is sent from one process to another (or all other) process(es).
+ * This framework does NOT interpret the payload (a string) in any way.
+ * </p>
+ * Create messages using the {@link MessageBuilder}. When you send a message
+ * the sender and receiver are filled in by the message routing code to ensure correctness / 
+ * to avoid spoofing. A future version may allow for ovrriding of this behavior to allow
+ * for greater fault simulation.
  */
 public final class Message implements Serializable {
 
@@ -48,6 +54,10 @@ public final class Message implements Serializable {
     b.append(" :: ");
     b.append(message);
     return b.toString();
+  }
+
+  public static MessageBuilder builder() {
+    return new MessageBuilder();
   }
   
   public static final class MessageBuilder {

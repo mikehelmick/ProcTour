@@ -5,6 +5,9 @@ import java.util.Random;
 
 import com.google.common.collect.Lists;
 
+/**
+ * Framework internal class. Used for weighted random in generating message delays.
+ */
 public class RandomWindow {
   private static Random rand = new Random(System.currentTimeMillis());
   

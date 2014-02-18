@@ -9,6 +9,16 @@ import com.google.common.collect.Maps;
 
 public class MutualExclusionValidator extends Validator {
   
+  private final int acquiresPerProcess;
+  private final int numProcesses;
+  private final int numResources;
+
+  private MutualExclusionValidator(int acquiresPerProcess, int numProcesses, int numResources) {
+    this.acquiresPerProcess = acquiresPerProcess;
+    this.numProcesses = numProcesses;
+    this.numResources = numResources;
+  }
+  
   public static class MutualExclusionValidatorBuilder {
     private int acquiresPerProcess = 1;
     private int numProcesses = 0;
@@ -39,15 +49,9 @@ public class MutualExclusionValidator extends Validator {
       return new MutualExclusionValidator(acquiresPerProcess, numProcesses, numResources);
     }
   }
-
-  private final int acquiresPerProcess;
-  private final int numProcesses;
-  private final int numResources;
-
-  private MutualExclusionValidator(int acquiresPerProcess, int numProcesses, int numResources) {
-    this.acquiresPerProcess = acquiresPerProcess;
-    this.numProcesses = numProcesses;
-    this.numResources = numResources;
+  
+  public static MutualExclusionValidatorBuilder builder() {
+    return new MutualExclusionValidatorBuilder();
   }
 
   @Override
@@ -76,7 +80,7 @@ public class MutualExclusionValidator extends Validator {
           errors.append("Expected event #" + (i + 1) + " to be a release, but it was not.\n");
           ok = false;
         }
-        if (acquire.getPid().equals(release.getPid())) {
+        if (!acquire.getPid().equals(release.getPid())) {
           errors.append("Events #" + i + " and #" + (i + 1) + " do not have the same PID, but should. "
               + "(" + acquire.getPid() + ", " + release.getPid() + ").\n");
           ok = false;
