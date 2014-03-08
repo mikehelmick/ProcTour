@@ -180,10 +180,12 @@ public final class ProcessManager {
               long delay = 0;
               if (rand.nextBoolean()) {
                 // Delay up to 5 seconds
-                delay = rand.nextLong() % 5000;
+                delay = Math.abs(rand.nextLong() % 5000);
                 // Ensure delay is past other deliveries
-                if (curTime + delay < pidToEarliestDelivery.get(pid)) {
-                  delay = (pidToEarliestDelivery.get(pid) - curTime) + delay / 2;
+                while (curTime + delay < pidToEarliestDelivery.get(pid)) {
+                  logger.warn("Insufficient delay routing to " + pid 
+                      + " :: " + (curTime + delay) + " < " + pidToEarliestDelivery.get(pid));
+                  delay += (pidToEarliestDelivery.get(pid) - curTime) + delay / 2;
                 }
               }
               pidToEarliestDelivery.put(pid, curTime + delay);
