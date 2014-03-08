@@ -5,11 +5,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.log4j.Logger;
 
@@ -22,13 +24,11 @@ import com.mikehelmick.proc.validators.Validator;
 
 public final class ProcessManager {
   private static Logger logger = Logger.getLogger(ProcessManager.class);
-  
+
   public static enum State {
-    STARTUP,
-    RUNNING,
-    SHUTDOWN
+    STARTUP, RUNNING, SHUTDOWN
   }
-  
+
   public static final int MAX_RESOURCE_COUNT = 100;
   public static final int THREADS = 4;
 
@@ -40,19 +40,21 @@ public final class ProcessManager {
   private long maxPid = 0;
   private State state = State.STARTUP;
   private Integer resourceCount = 1;
-  
+
   // The order of messages and ticks.
   private BlockingQueue<Long> executionQueue = Queues.newLinkedBlockingQueue();
   private ScheduledFuture<?> heartbeatHandle;
   private ScheduledExecutorService executor;
   private HeartBeat heartBeat;
   private MessageRouter messageRouter;
-  
+  private Map<Long, AtomicBoolean> currentlyRunning = Maps.newConcurrentMap();
+
   // Consensus declarations
   private Map<String, ConsensusDeclaration> consensusDeclarations = Maps.newConcurrentMap();
-  
+
   // Validators that are listening
-  private List<Validator> validators = Collections.synchronizedList(Lists.<Validator>newLinkedList());
+  private List<Validator> validators = Collections.synchronizedList(Lists
+      .<Validator> newLinkedList());
 
   private ProcessManager() {
     // Nothing left to do.
@@ -67,17 +69,17 @@ public final class ProcessManager {
     INSTANCE = null;
     INSTANCE = new ProcessManager();
   }
- 
+
   public static ProcessManager getInstance() {
     return INSTANCE;
   }
-  
+
   private class HeartBeat implements Runnable {
     private final Logger hbLogger = Logger.getLogger(HeartBeat.class);
 
     private final List<Long> procIds;
     private long heartbeats = 0;
-    
+
     HeartBeat(long maxProc) {
       hbLogger.info("HeartBeat created");
       procIds = Lists.newArrayList();
@@ -85,11 +87,11 @@ public final class ProcessManager {
         procIds.add(pid);
       }
     }
-    
+
     long getHeartbeats() {
       return heartbeats;
     }
-    
+
     @Override
     public void run() {
       heartbeats++;
@@ -97,34 +99,33 @@ public final class ProcessManager {
       Collections.shuffle(procIds);
       for (Long pid : procIds) {
         final Proc process = procMap.get(pid);
-        executor.submit(
-            new Runnable() {
-              @Override
-              public void run() {
-                try {
-                  process.tick();
-                } catch (Exception ex) {
-                  logger.fatal("receiveMessage caused an exception", ex);
-                  System.exit(1);
-                }
-              }                  
-            });
+        executor.submit(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              process.tick();
+            } catch (Exception ex) {
+              logger.fatal("receiveMessage caused an exception", ex);
+              System.exit(1);
+            }
+          }
+        });
       }
     }
   }
-  
+
   /**
-   * Reads the execution queue and the messages outstanding.
-   * Random delays are inserted.
+   * Reads the execution queue and the messages outstanding. Random delays are
+   * inserted.
    */
   private class MessageRouter implements Runnable {
     private Logger mrLogger = Logger.getLogger(MessageRouter.class);
     private boolean keepGoing = true;
     private final Random rand;
     private final Map<Long, Long> pidToEarliestDelivery = Maps.newConcurrentMap();
-    
+
     private long messages = 0;
-    
+
     MessageRouter(Long maxPid) {
       for (long pid = 1; pid <= maxPid; pid++) {
         pidToEarliestDelivery.put(pid, SystemTime.getTime());
@@ -135,42 +136,43 @@ public final class ProcessManager {
     void shutdown() {
       keepGoing = false;
     }
-    
+
     long getMessages() {
       return messages;
     }
-    
+
     @Override
     public void run() {
       mrLogger.info("Starting message router");
       while (keepGoing) {
         try {
-          final Long pid = executionQueue.poll(5, TimeUnit.SECONDS);
+          final Long pid = executionQueue.poll(250, TimeUnit.MILLISECONDS);
           if (pid == null) {
             mrLogger.info("No messages to route.");
             continue;
           }
           final Proc process = procMap.get(pid);
-          
+
           // See if there is a message for this process
           Map<Long, LinkedBlockingQueue<Envelope>> myMailboxes = mailboxes.get(pid);
-          
-          synchronized(myMailboxes) {
+
+          synchronized (myMailboxes) {
             if (!myMailboxes.isEmpty()) {
+              
               // Select a random sender, deliver message
               RandomWindow rw = new RandomWindow();
               long systemTime = SystemTime.getTime();
               for (Map.Entry<Long, LinkedBlockingQueue<Envelope>> entry : myMailboxes.entrySet()) {
                 rw.addInterval(entry.getKey(), systemTime - entry.getValue().peek().getSystemTime());
               }
-              
+
               Long selectedSender = rw.nextRandom();
               final Message message = myMailboxes.get(selectedSender).poll().getMessage();
-              
+
               if (myMailboxes.get(selectedSender).isEmpty()) {
                 myMailboxes.remove(selectedSender);
               }
-              
+
               mrLogger.debug("scheduling message pid: " + pid + " message: " + message);
               messages++;
               // insert a random delay random delay
@@ -185,23 +187,40 @@ public final class ProcessManager {
                 }
               }
               pidToEarliestDelivery.put(pid, curTime + delay);
+              
               executor.schedule(
                   // TODO(@mikehelmick) - add some synchronization here
                   new Runnable() {
                     @Override
                     public void run() {
+                      // OK - message to route, but we should make sure one isn't running
+                      final AtomicBoolean cr = currentlyRunning.get(pid);
+                      while (!cr.compareAndSet(false, true)) {
+                        logger.warn("Unable to deliver message to " + pid + " due to mesage being processed already.");
+                        try {
+                          Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                          e.printStackTrace();
+                        }
+                      }
+                      
                       try {
                         mrLogger.debug("delivering message pid: " + pid + " message: " + message);
                         process.receiveMessage(message);
+                        
                       } catch (Exception ex) {
                         logger.fatal("receiveMessage caused an exception", ex);
                         System.exit(1);
+                      } finally {
+                        // Not running.
+                        currentlyRunning.get(pid).set(false);
                       }
                     }
-                  },
-                  delay, TimeUnit.MILLISECONDS);
+                  }, delay, TimeUnit.MILLISECONDS);
+
             } else {
-              mrLogger.warn("Inconsistency - nothing in the mailbox for pid: " + pid + ", but told to send message");
+              mrLogger.warn("Inconsistency - nothing in the mailbox for pid: " + pid
+                  + ", but told to send message");
             }
           }
         } catch (InterruptedException e) {
@@ -214,7 +233,7 @@ public final class ProcessManager {
   public void addValidator(Validator validator) {
     validators.add(validator);
   }
-  
+
   public long getProcessCount() {
     return maxPid;
   }
@@ -222,13 +241,15 @@ public final class ProcessManager {
   public int getSharedResouceCount() {
     return resources.size();
   }
-  
+
   public synchronized void setSharedResourceCount(int resourceCount) {
     if (resourceCount < 1 || resourceCount > MAX_RESOURCE_COUNT) {
-      throw new IllegalArgumentException("Resource count must be between 1 and " + MAX_RESOURCE_COUNT + ", inclusive.");
+      throw new IllegalArgumentException("Resource count must be between 1 and "
+          + MAX_RESOURCE_COUNT + ", inclusive.");
     }
     resources.clear();
-    // No need to put anything in the resource map. If unheld, we will leave that slot empty (null);
+    // No need to put anything in the resource map. If unheld, we will leave
+    // that slot empty (null);
   }
 
   public synchronized void scheduleShutdown(long delay, TimeUnit unit) {
@@ -236,17 +257,17 @@ public final class ProcessManager {
       logger.error("Attempt to schedule a future shutdown when simulation isn't running");
       throw new IllegalStateException("Cannot schedule shutdown unless simulation is running");
     }
-    
-    // Simply schedule the simultion to reuest an orderly shutdown at some point in the future.
-    executor.schedule(
-        new Runnable() {
-          @Override
-          public void run() {
-            shutdown();
-          }
-        }, delay, unit);
+
+    // Simply schedule the simultion to reuest an orderly shutdown at some point
+    // in the future.
+    executor.schedule(new Runnable() {
+      @Override
+      public void run() {
+        shutdown();
+      }
+    }, delay, unit);
   }
-  
+
   public synchronized void start() {
     logger.info("Startup requested");
     if (!(state.equals(State.STARTUP))) {
@@ -256,39 +277,43 @@ public final class ProcessManager {
       throw new IllegalStateException("No processes have been created. Unable to start simulation");
     }
     
+    // setup the mutual exclusion blocks for message processing
+    for (Map.Entry<Long, Proc> entry : this.procMap.entrySet()) {
+      currentlyRunning.put(entry.getKey(), new AtomicBoolean(false));
+    }
+
     // Create the execution pool
     logger.info("Creating thread pool");
     executor = Executors.newScheduledThreadPool(THREADS);
     // Create the heartbeat, this will get things started. Hopefully.
     heartBeat = new HeartBeat(maxPid);
-    heartbeatHandle = executor.scheduleWithFixedDelay(
-        heartBeat, 1, 5, TimeUnit.SECONDS);
+    heartbeatHandle = executor.scheduleWithFixedDelay(heartBeat, 1, 5, TimeUnit.SECONDS);
     logger.info("Thread pool initialized, simulator running");
-    
+
     logger.info("Message router starting up.");
     messageRouter = new MessageRouter(maxPid);
     Thread mrThread = new Thread(messageRouter);
     mrThread.start();
     logger.info("Message router is running.");
-    
+
     state = State.RUNNING;
   }
-  
+
   public synchronized void shutdown() {
     if (!(state.equals(State.RUNNING))) {
       throw new IllegalStateException("Simulation is not running, can not shutdown.");
     }
-    
+
     logger.info("Shutdown requested");
     logger.info("Stopping message router - all pending messages will be lost");
     messageRouter.shutdown();
-    
+
     logger.info("Stopping executor service");
     state = State.SHUTDOWN;
     heartbeatHandle.cancel(false);
     executor.shutdown();
     logger.info("Execution service shutdown entered.");
-    
+
     long maxWaitTime = TimeUnit.MINUTES.toMillis(1) + System.currentTimeMillis();
     while (System.currentTimeMillis() < maxWaitTime && !executor.isTerminated()) {
       logger.info(" ... awaiting shutdown ...");
@@ -305,11 +330,11 @@ public final class ProcessManager {
       logger.error("Shutdown did not occur within timeout. Halting system.");
       executor.shutdownNow();
     }
-    
+
     logger.info("All tasks terminated.");
     logger.info("Heartbeat periods: " + heartBeat.getHeartbeats());
     logger.info("Messages delivered: " + messageRouter.getMessages());
-    
+
     logger.info("Running validators: " + validators.size());
     for (Validator validator : validators) {
       logger.info("Checking validator: " + validator.getClass().getCanonicalName());
@@ -329,26 +354,27 @@ public final class ProcessManager {
         // don't send to self
         continue;
       }
-      
+
       Map<Long, LinkedBlockingQueue<Envelope>> recvMailboxes = mailboxes.get(pid);
-      synchronized(recvMailboxes) {
+      synchronized (recvMailboxes) {
         if (!recvMailboxes.containsKey(proc.getProcessId())) {
           LinkedBlockingQueue<Envelope> queue = Queues.newLinkedBlockingQueue();
           recvMailboxes.put(proc.getProcessId(), queue);
         }
-        recvMailboxes.get(proc.getProcessId()).offer(new Envelope(builder.setReceiver(pid).build()));
+        recvMailboxes.get(proc.getProcessId())
+            .offer(new Envelope(builder.setReceiver(pid).build()));
       }
       executionQueue.add(pid);
     }
   }
-  
+
   void sendOne(Message.MessageBuilder builder, Long receiver, Proc proc) {
     if (receiver.equals(proc.getProcessId())) {
       throw new IllegalArgumentException("Cannot send a message to yourself.");
     }
-    
+
     Map<Long, LinkedBlockingQueue<Envelope>> recvMailboxes = mailboxes.get(receiver);
-    synchronized(recvMailboxes) {
+    synchronized (recvMailboxes) {
       if (!recvMailboxes.containsKey(proc.getProcessId())) {
         LinkedBlockingQueue<Envelope> queue = Queues.newLinkedBlockingQueue();
         recvMailboxes.put(proc.getProcessId(), queue);
@@ -358,17 +384,20 @@ public final class ProcessManager {
     }
     executionQueue.add(receiver);
   }
-  
+
   public synchronized void declareOwnership(Clock time, Integer resource, Proc proc) {
     if (resource < 0 || resource > resourceCount) {
-      throw new IllegalArgumentException("Invalid resource, " + resource + ", must be >= 1 and <= " + resourceCount);
+      throw new IllegalArgumentException("Invalid resource, " + resource + ", must be >= 1 and <= "
+          + resourceCount);
     }
-    
-    logger.info("Resource declaration for resource " + resource + " by pid: " + proc.getProcessId());
+
+    logger
+        .info("Resource declaration for resource " + resource + " by pid: " + proc.getProcessId());
     if (resources.get(resource) == null) {
-       logger.info("Successful resource declaration for resource " + resource + " by pid: " + proc.getProcessId());
-       resources.put(resource, proc);
-       Validator.resourceDeclaration(resource, proc.getProcessId(), time);
+      logger.info("Successful resource declaration for resource " + resource + " by pid: "
+          + proc.getProcessId());
+      resources.put(resource, proc);
+      Validator.resourceDeclaration(resource, proc.getProcessId(), time);
     } else {
       final String error = "Invalid resource declaration: " + resource + " is currently owned by "
           + resources.get(resource) + " and cannot be claimed by " + proc.getProcessId();
@@ -376,21 +405,23 @@ public final class ProcessManager {
       throw new IllegalStateException(error);
     }
   }
-  
+
   public synchronized void releaseOwnership(Clock time, int resource, Proc proc) {
     if (resource < 0 || resource > resourceCount) {
-      throw new IllegalArgumentException("Invalid resource, " + resource + ", must be >= 1 and <= " + resourceCount);
+      throw new IllegalArgumentException("Invalid resource, " + resource + ", must be >= 1 and <= "
+          + resourceCount);
     }
-    
-    logger.info("Resource release requested for resource " + resource + " byd pid: " + proc.getProcessId());
+
+    logger.info("Resource release requested for resource " + resource + " byd pid: "
+        + proc.getProcessId());
     if (!resources.containsKey(resource)) {
       final String error = "Invalid resource release: " + resource + " is is not currently owned. "
           + "Release requested by " + proc.getProcessId();
       throw new IllegalStateException(error);
     } else if (!resources.get(resource).equals(proc)) {
       final String error = "Invalid resource release: " + resource + " is owned by "
-          + resources.get(resource).getProcessId()
-          + ", but release requested by " + proc.getProcessId();
+          + resources.get(resource).getProcessId() + ", but release requested by "
+          + proc.getProcessId();
       throw new IllegalStateException(error);
     } else {
       logger.info("Resource release of " + resource + " was successful");
@@ -398,7 +429,7 @@ public final class ProcessManager {
       Validator.resourceReleased(resource, proc.getProcessId(), time);
     }
   }
-  
+
   public synchronized void declareConsensus(Clock time, String data, Proc proc) {
     ConsensusDeclaration cd;
     if (!consensusDeclarations.containsKey(data)) {
@@ -414,7 +445,7 @@ public final class ProcessManager {
     if (!state.equals(State.STARTUP)) {
       throw new IllegalStateException("Impossible to regsiter process, no longer in startup state.");
     }
-    
+
     final long procId = ++maxPid;
     logger.info("New process registered, pid: " + procId);
     procMap.put(procId, proc);
