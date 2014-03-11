@@ -76,7 +76,7 @@ public class MutualExclusionValidator extends Validator {
       for (int i = 0; i < events.size() - 1; i = i + 2) {
         logger.info("Event " + i + " : " + events.get(i));
         ResourceEvent acquire = events.get(i);
-        logger.info("Event " + i + 1 + " : " + events.get(i + 1));
+        logger.info("Event " + (i + 1) + " : " + events.get(i + 1));
         ResourceEvent release = events.get(i + 1);
         
         boolean ok = true;
