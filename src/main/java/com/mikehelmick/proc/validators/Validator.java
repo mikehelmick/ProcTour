@@ -100,6 +100,21 @@ public abstract class Validator {
       return !declaration;
     }
 
+    @Override
+    public String toString() {
+      StringBuffer buf = new StringBuffer();
+      if (declaration) {
+        buf.append("Acquire: ");
+      } else {
+        buf.append("Release: " );
+      }
+      buf.append("pid: ");
+      buf.append(pid);
+      buf.append(" clock: ");
+      buf.append(clock);
+      return buf.toString();
+    }
+
     @Override 
     public boolean equals(Object o) {
       if (!(o instanceof ResourceEvent)) {

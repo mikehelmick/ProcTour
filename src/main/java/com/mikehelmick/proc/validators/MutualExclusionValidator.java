@@ -3,11 +3,15 @@ package com.mikehelmick.proc.validators;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.log4j.Logger;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.mikehelmick.proc.ProcessManager;
 
 public class MutualExclusionValidator extends Validator {
+  private static Logger logger = Logger.getLogger(MutualExclusionValidator.class);
   
   private final int acquiresPerProcess;
   private final int numProcesses;
@@ -60,15 +64,19 @@ public class MutualExclusionValidator extends Validator {
     
     // For each resource
     for (Integer resource = 1; resource <= numResources; resource = resource + 1) {
+      logger.info("Validating resource " + resource);
       // Count the number of acquires per process and that the next element is a release.
       final List<ResourceEvent> events = Lists.newArrayList(getResourceEvents().get(resource));
       final Map<Long, Integer> counts = Maps.newHashMap();
       for (long p = 1; p <= numProcesses; p++) {
         counts.put(p, 0);
       }
-      
+
+      logger.info("Resource " + resource + " event count: " + events.size());
       for (int i = 0; i < events.size() - 1; i = i + 2) {
+        logger.info("Event " + i + " : " + events.get(i));
         ResourceEvent acquire = events.get(i);
+        logger.info("Event " + i + 1 + " : " + events.get(i + 1));
         ResourceEvent release = events.get(i + 1);
         
         boolean ok = true;
