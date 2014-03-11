@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -146,9 +145,9 @@ public final class ProcessManager {
       mrLogger.info("Starting message router");
       while (keepGoing) {
         try {
-          final Long pid = executionQueue.poll(250, TimeUnit.MILLISECONDS);
+          final Long pid = executionQueue.poll(1000, TimeUnit.MILLISECONDS);
           if (pid == null) {
-            mrLogger.info("No messages to route.");
+            mrLogger.debug("No messages to route.");
             continue;
           }
           final Proc process = procMap.get(pid);
