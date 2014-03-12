@@ -41,6 +41,14 @@
 <p>ProcTour is a distributed algorithms simulator written in Java. Using a single JVM instance, ProcTour makes it easy to code and test distributed algorithms without worrying about things like discovery, bootstrapping, network programming, or serialization. You can write algorithms by extending the <a href="/ProcTour/javadoc/com/mikehelmick/proc/Proc.html">Proc</a> class and responding to two types of messages (1) Heartbeats, via the tick method and (2) messages via the receiveMessage method. Processes can send messages in either unicast or multicast fashion. An example (and a poor example at that) is <a href="https://github.com/mikehelmick/ProcTour/blob/master/src/main/java/com/mikehelmick/proc/example/Example.java">available here</a>. Defining your own clock class is critical, an interface is provided for clocks, but it is not functional. Some kind of virtual clock implementation is recommended.</p>
 
 <h3>
+<a name="assignments" class="anchor" href="#assignments"><span class="octicon octicon-link"></span></a>Assignments</h3>
+<p>Sample programming assignments, available under the MIT license.
+  <ul>
+    <li><a href="https://docs.google.com/document/d/1DxVSUnSGbvsOCzq7Me83uqXIMtzYpV_il9CPnri9wzg/edit#">Lamport Clocks / Mutual Exclusion</a></li>
+  </ul>
+</p>
+
+<h3>
 <a name="documentation" class="anchor" href="#documentation"><span class="octicon octicon-link"></span></a>Documentation</h3>
 
 <p>Access <a href="/ProcTour/javadoc/index.html">the latest javadoc for ProcTour</a></p>
@@ -66,6 +74,10 @@
 <p>ProcTour includes a system for distributed algorithm validators. Currently, only a simple validator for distributed mutual exclusion is provided. This validator does not validate that your code actually implements distributed clocks, just that resources are only accessed by 1 process at a time, and ever release occurs after a corresponding acquire.</p>
 
 <p>More validators are planned!</p>
+
+<h3>
+<a name="contributions" class="anchor" href="#contributions"><span class="octicon octicon-link"></span></a>Contributions</h3>
+<p>Contributions are welcome and encouraged. Coding standards: <a href="http://google-styleguide.googlecode.com/svn/trunk/javaguide.html">Google Java Style</a>. Pull requests must pass a Tavis-CI build and code review, but we respond quickly.</p>
 
         </section>
 
