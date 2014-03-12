@@ -401,7 +401,7 @@ public final class ProcessManager {
       Validator.resourceDeclaration(resource, proc.getProcessId(), time);
     } else {
       final String error = "Invalid resource declaration: " + resource + " is currently owned by "
-          + resources.get(resource) + " and cannot be claimed by " + proc.getProcessId();
+          + resources.get(resource) + " PID: " + resources.get(resource).processId + " and cannot be claimed by " + proc.getProcessId();
       logger.fatal(error);
       throw new IllegalStateException(error);
     }
