@@ -10,6 +10,8 @@ define 'proctour' do
   
   desc 'The ProcTour distributed algorithm simulator.'
    
+  compile.options.target = '1.7'
+  compile.options.lint = 'all'
   compile.with 'com.google.guava:guava:jar:16.0.1', 'log4j:log4j:jar:1.2.16'
   package :jar
   
