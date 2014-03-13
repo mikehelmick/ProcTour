@@ -97,7 +97,8 @@ public final class Message implements Serializable {
       return this;
     }
     
-    Message build() {
+    @VisibleForTesting
+    public Message build() {
       return new Message(clock, sender, receiver, message);
     }
   }
