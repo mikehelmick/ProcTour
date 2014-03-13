@@ -249,6 +249,7 @@ public final class ProcessManager {
           + MAX_RESOURCE_COUNT + ", inclusive.");
     }
     resources.clear();
+    this.resourceCount = resourceCount;
     // No need to put anything in the resource map. If unheld, we will leave
     // that slot empty (null);
   }
