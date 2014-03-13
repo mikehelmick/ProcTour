@@ -2,6 +2,8 @@ package com.mikehelmick.proc;
 
 import java.io.Serializable;
 
+import com.google.common.annotations.VisibleForTesting;
+
 /**
  * Message that is sent from one process to another (or all other) process(es).
  * This framework does NOT interpret the payload (a string) in any way.
@@ -83,12 +85,14 @@ public final class Message implements Serializable {
       return this;
     }
     
-    MessageBuilder setSender(Long sender) {
+    @VisibleForTesting
+    public MessageBuilder setSender(Long sender) {
       this.sender = sender;
       return this;
     }
-    
-    MessageBuilder setReceiver(Long receiver) {
+
+    @VisibleForTesting
+    public MessageBuilder setReceiver(Long receiver) {
       this.receiver = receiver;
       return this;
     }
