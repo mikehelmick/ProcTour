@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.log4j.Logger;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
@@ -29,7 +30,7 @@ public final class ProcessManager {
   }
 
   public static final int MAX_RESOURCE_COUNT = 100;
-  public static final int THREADS = 4;
+  private int threads = 4;
 
   private static ProcessManager INSTANCE = new ProcessManager();
 
@@ -239,6 +240,12 @@ public final class ProcessManager {
     return maxPid;
   }
 
+  public void setThreads(int threads) {
+    Preconditions.checkArgument(state.equals(State.STARTUP));
+    Preconditions.checkArgument(threads >= 1);
+    this.threads = threads;
+  }
+
   public int getSharedResouceCount() {
     return resources.size();
   }
@@ -286,7 +293,7 @@ public final class ProcessManager {
 
     // Create the execution pool
     logger.info("Creating thread pool");
-    executor = Executors.newScheduledThreadPool(THREADS);
+    executor = Executors.newScheduledThreadPool(threads);
     // Create the heartbeat, this will get things started. Hopefully.
     heartBeat = new HeartBeat(maxPid);
     heartbeatHandle = executor.scheduleWithFixedDelay(heartBeat, 1, 5, TimeUnit.SECONDS);
