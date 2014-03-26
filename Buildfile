@@ -1,7 +1,7 @@
 
 repositories.remote << 'http://repo1.maven.org/maven2'
 
-THIS_VERSION = "1.0.0"
+THIS_VERSION = "1.0.1"
 
 define 'proctour' do
   project.version = THIS_VERSION

@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -35,19 +34,17 @@ public final class ProcessManager {
   private static ProcessManager INSTANCE = new ProcessManager();
 
   private Map<Long, Proc> procMap = Maps.newConcurrentMap();
-  private Map<Long, Map<Long, LinkedBlockingQueue<Envelope>>> mailboxes = Maps.newConcurrentMap();
+  private Map<Long, Mailman> mailPersons = Maps.newConcurrentMap();
   private Map<Integer, Proc> resources = Maps.newConcurrentMap();
   private long maxPid = 0;
   private State state = State.STARTUP;
   private Integer resourceCount = 1;
 
   // The order of messages and ticks.
-  private BlockingQueue<Long> executionQueue = Queues.newLinkedBlockingQueue();
   private ScheduledFuture<?> heartbeatHandle;
   private ScheduledExecutorService executor;
   private HeartBeat heartBeat;
   private MessageRouter messageRouter;
-  private Map<Long, AtomicBoolean> currentlyRunning = Maps.newConcurrentMap();
 
   // Consensus declarations
   private Map<String, ConsensusDeclaration> consensusDeclarations = Maps.newConcurrentMap();
@@ -121,16 +118,11 @@ public final class ProcessManager {
   private class MessageRouter implements Runnable {
     private Logger mrLogger = Logger.getLogger(MessageRouter.class);
     private boolean keepGoing = true;
-    private final Random rand;
-    private final Map<Long, Long> pidToEarliestDelivery = Maps.newConcurrentMap();
 
     private long messages = 0;
+    private final Random rand = new Random(SystemTime.getTime());
 
-    MessageRouter(Long maxPid) {
-      for (long pid = 1; pid <= maxPid; pid++) {
-        pidToEarliestDelivery.put(pid, SystemTime.getTime());
-      }
-      rand = new Random(SystemTime.getTime());
+    MessageRouter() {
     }
 
     void shutdown() {
@@ -140,94 +132,52 @@ public final class ProcessManager {
     long getMessages() {
       return messages;
     }
+    
+    synchronized void incrementMessageCount() {
+      messages++;
+    }
 
     @Override
     public void run() {
       mrLogger.info("Starting message router");
       while (keepGoing) {
-        try {
-          final Long pid = executionQueue.poll(1000, TimeUnit.MILLISECONDS);
-          if (pid == null) {
-            mrLogger.debug("No messages to route.");
-            continue;
+        List<Mailman> freeMailmen = Lists.newArrayList();
+        for (Map.Entry<Long, Mailman> mmEntry : mailPersons.entrySet()) {
+          if (!mmEntry.getValue().isBusy() && mmEntry.getValue().hasMessagesToSend()) {
+            freeMailmen.add(mmEntry.getValue());
           }
-          final Proc process = procMap.get(pid);
-
-          // See if there is a message for this process
-          Map<Long, LinkedBlockingQueue<Envelope>> myMailboxes = mailboxes.get(pid);
-
-          synchronized (myMailboxes) {
-            if (!myMailboxes.isEmpty()) {
-              
-              // Select a random sender, deliver message
-              RandomWindow rw = new RandomWindow();
-              long systemTime = SystemTime.getTime();
-              for (Map.Entry<Long, LinkedBlockingQueue<Envelope>> entry : myMailboxes.entrySet()) {
-                rw.addInterval(entry.getKey(), systemTime - entry.getValue().peek().getSystemTime());
-              }
-
-              Long selectedSender = rw.nextRandom();
-              final Message message = myMailboxes.get(selectedSender).poll().getMessage();
-
-              if (myMailboxes.get(selectedSender).isEmpty()) {
-                myMailboxes.remove(selectedSender);
-              }
-
-              mrLogger.debug("scheduling message pid: " + pid + " message: " + message);
-              messages++;
-              // insert a random delay random delay
-              Long curTime = SystemTime.getTime();
-              long delay = 0;
-              if (rand.nextBoolean()) {
-                // Delay up to 5 seconds
-                delay = Math.abs(rand.nextLong() % 5000);
-                // Ensure delay is past other deliveries
-                while (curTime + delay < pidToEarliestDelivery.get(pid)) {
-                  logger.warn("Insufficient delay routing to " + pid 
-                      + " :: " + (curTime + delay) + " < " + pidToEarliestDelivery.get(pid));
-                  delay += (pidToEarliestDelivery.get(pid) - curTime) + delay / 2;
+        }
+        //logger.info("Free mailman count: " + freeMailmanCount);
+        
+        if (freeMailmen.isEmpty()) {
+          logger.info("No messages to route.");
+          try {
+            Thread.sleep(1000);
+          } catch (InterruptedException iex) {
+            Thread.interrupted();
+          }
+          continue;
+        }
+        
+        // pick a random mailman.
+        
+        final Mailman mailman = freeMailmen.get(rand.nextInt(freeMailmen.size()));
+        if (mailman.isBusy()) {
+          // This would be an error condition, but it is OK.
+          continue;
+        }
+        mailman.markBusy();
+        
+        
+        executor.submit(
+            new Runnable() {
+              @Override
+              public void run() {
+                if (mailman.deliverOneMessage()) {
+                  incrementMessageCount();
                 }
               }
-              pidToEarliestDelivery.put(pid, curTime + delay);
-              
-              executor.schedule(
-                  // TODO(@mikehelmick) - add some synchronization here
-                  new Runnable() {
-                    @Override
-                    public void run() {
-                      // OK - message to route, but we should make sure one isn't running
-                      final AtomicBoolean cr = currentlyRunning.get(pid);
-                      while (!cr.compareAndSet(false, true)) {
-                        logger.warn("Unable to deliver message to " + pid + " due to mesage being processed already.");
-                        try {
-                          Thread.sleep(100);
-                        } catch (InterruptedException e) {
-                          e.printStackTrace();
-                        }
-                      }
-                      
-                      try {
-                        mrLogger.debug("delivering message pid: " + pid + " message: " + message);
-                        process.receiveMessage(message);
-                        
-                      } catch (Exception ex) {
-                        logger.fatal("receiveMessage caused an exception", ex);
-                        System.exit(1);
-                      } finally {
-                        // Not running.
-                        currentlyRunning.get(pid).set(false);
-                      }
-                    }
-                  }, delay, TimeUnit.MILLISECONDS);
-
-            } else {
-              mrLogger.warn("Inconsistency - nothing in the mailbox for pid: " + pid
-                  + ", but told to send message");
-            }
-          }
-        } catch (InterruptedException e) {
-          Thread.interrupted();
-        }
+            });
       }
     }
   }
@@ -286,10 +236,13 @@ public final class ProcessManager {
       throw new IllegalStateException("No processes have been created. Unable to start simulation");
     }
     
-    // setup the mutual exclusion blocks for message processing
-    for (Map.Entry<Long, Proc> entry : this.procMap.entrySet()) {
-      currentlyRunning.put(entry.getKey(), new AtomicBoolean(false));
+    // Create the mailman for each process
+    for (long pid = 1L; pid <= this.maxPid; pid++) {
+      final Mailman mailman = new Mailman(procMap.get(pid), maxPid);
+      mailPersons.put(pid, mailman);
+      logger.info("Mailman created, ready for pid: " + pid);
     }
+    logger.info("All mailmen created.");
 
     // Create the execution pool
     logger.info("Creating thread pool");
@@ -300,7 +253,7 @@ public final class ProcessManager {
     logger.info("Thread pool initialized, simulator running");
 
     logger.info("Message router starting up.");
-    messageRouter = new MessageRouter(maxPid);
+    messageRouter = new MessageRouter();
     Thread mrThread = new Thread(messageRouter);
     mrThread.start();
     logger.info("Message router is running.");
@@ -364,16 +317,8 @@ public final class ProcessManager {
         continue;
       }
 
-      Map<Long, LinkedBlockingQueue<Envelope>> recvMailboxes = mailboxes.get(pid);
-      synchronized (recvMailboxes) {
-        if (!recvMailboxes.containsKey(proc.getProcessId())) {
-          LinkedBlockingQueue<Envelope> queue = Queues.newLinkedBlockingQueue();
-          recvMailboxes.put(proc.getProcessId(), queue);
-        }
-        recvMailboxes.get(proc.getProcessId())
-            .offer(new Envelope(builder.setReceiver(pid).build()));
-      }
-      executionQueue.add(pid);
+      final Mailman mailman = mailPersons.get(pid);
+      mailman.addMessage(builder);
     }
   }
 
@@ -381,17 +326,9 @@ public final class ProcessManager {
     if (receiver.equals(proc.getProcessId())) {
       throw new IllegalArgumentException("Cannot send a message to yourself.");
     }
-
-    Map<Long, LinkedBlockingQueue<Envelope>> recvMailboxes = mailboxes.get(receiver);
-    synchronized (recvMailboxes) {
-      if (!recvMailboxes.containsKey(proc.getProcessId())) {
-        LinkedBlockingQueue<Envelope> queue = Queues.newLinkedBlockingQueue();
-        recvMailboxes.put(proc.getProcessId(), queue);
-      }
-      recvMailboxes.get(proc.getProcessId()).offer(
-          new Envelope(builder.setSender(proc.getProcessId()).setReceiver(receiver).build()));
-    }
-    executionQueue.add(receiver);
+    
+    final Mailman mailman = mailPersons.get(receiver);
+    mailman.addMessage(builder.setSender(proc.getProcessId()));
   }
 
   public synchronized void declareOwnership(Clock time, Integer resource, Proc proc) {
@@ -458,10 +395,6 @@ public final class ProcessManager {
     final long procId = ++maxPid;
     logger.info("New process registered, pid: " + procId);
     procMap.put(procId, proc);
-    // Create a mailbox for this process
-    Map<Long, LinkedBlockingQueue<Envelope>> myMailboxes = Maps.newConcurrentMap();
-    mailboxes.put(procId, myMailboxes);
-    logger.info("Mailbox created, ready for pid: " + procId);
     return procId;
   }
 }

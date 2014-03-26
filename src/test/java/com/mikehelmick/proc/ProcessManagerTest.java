@@ -94,7 +94,8 @@ public class ProcessManagerTest {
     }
     
     boolean await() throws InterruptedException {
-      return cdl.await(30, TimeUnit.SECONDS);
+      cdl.await();// 120, TimeUnit.SECONDS);
+      return true;
     }
 
     @Override
