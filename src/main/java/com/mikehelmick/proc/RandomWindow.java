@@ -12,10 +12,14 @@ public class RandomWindow {
   private static Random rand = new Random(System.currentTimeMillis());
   
   private final List<Pairing> pairings = Lists.newArrayList();
-  private long maxVal = 0;;
+  private long maxVal = 0;
   
   public RandomWindow() {
     
+  }
+  
+  public boolean isEmpty() {
+    return pairings.isEmpty();
   }
 
   public void addInterval(long val, long interval) {
